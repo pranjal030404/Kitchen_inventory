@@ -1,0 +1,30 @@
+-- Optional: the server creates these automatically on startup.
+CREATE DATABASE IF NOT EXISTS kitchenstock;
+USE kitchenstock;
+
+CREATE TABLE IF NOT EXISTS items (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(150) NOT NULL,
+  category VARCHAR(60) NOT NULL,
+  quantity DECIMAL(10,2) NOT NULL DEFAULT 0,
+  unit VARCHAR(20) NOT NULL DEFAULT 'pcs',
+  min_stock DECIMAL(10,2) NOT NULL DEFAULT 1,
+  price DECIMAL(10,2) NOT NULL DEFAULT 0,
+  purchase_date DATE NULL,
+  expiry_date DATE NULL,
+  location VARCHAR(120) NOT NULL DEFAULT '',
+  supplier VARCHAR(120) NOT NULL DEFAULT '',
+  notes TEXT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_category (category),
+  INDEX idx_expiry (expiry_date)
+);
+
+CREATE TABLE IF NOT EXISTS shopping_items (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(150) NOT NULL,
+  qty VARCHAR(80) NOT NULL DEFAULT '',
+  done TINYINT(1) NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
