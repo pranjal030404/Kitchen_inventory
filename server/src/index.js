@@ -5,6 +5,9 @@ import { initDb } from './db.js';
 import itemsRouter from './routes/items.js';
 import shoppingRouter from './routes/shopping.js';
 import dataRouter from './routes/data.js';
+import authRouter from './routes/auth.js';
+import usersRouter from './routes/users.js';
+import { requireAuth, requireAdmin } from './auth.js';
 
 dotenv.config();
 const app = express();
@@ -12,9 +15,11 @@ app.use(cors({ origin: process.env.CLIENT_ORIGIN || true }));
 app.use(express.json({ limit: '5mb' }));
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
-app.use('/api/items', itemsRouter);
-app.use('/api/shopping', shoppingRouter);
-app.use('/api', dataRouter);
+app.use('/api/auth', authRouter);
+app.use('/api/users', requireAuth, requireAdmin, usersRouter);
+app.use('/api/items', requireAuth, itemsRouter);
+app.use('/api/shopping', requireAuth, shoppingRouter);
+app.use('/api', requireAuth, dataRouter);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

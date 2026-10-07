@@ -1,5 +1,6 @@
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
+import bcrypt from 'bcryptjs';
 dotenv.config();
 
 const { DB_HOST = 'localhost', DB_PORT = 3306, DB_USER = 'root', DB_PASSWORD = '', DB_NAME = 'kitchenstock' } = process.env;
@@ -37,8 +38,30 @@ export async function initDb() {
 
   pool = mysql.createPool({ ...base, database: DB_NAME, dateStrings: true, decimalNumbers: true, connectionLimit: 10 });
 
+  await pool.query(`CREATE TABLE IF NOT EXISTS users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(150) NOT NULL UNIQUE,
+    password_hash VARCHAR(100) NOT NULL,
+    role ENUM('admin','user') NOT NULL DEFAULT 'user',
+    active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  ) CHARACTER SET utf8mb4`);
+
+  const adminEmail = (process.env.ADMIN_EMAIL || 'admin@kitchen.local').toLowerCase();
+  let [[admin]] = await pool.query("SELECT id FROM users WHERE role='admin' ORDER BY id LIMIT 1");
+  if (!admin) {
+    const hash = await bcrypt.hash(process.env.ADMIN_PASSWORD || 'Admin@123', 10);
+    const [r] = await pool.query('INSERT INTO users (name,email,password_hash,role) VALUES (?,?,?,?)', [
+      process.env.ADMIN_NAME || 'Admin', adminEmail, hash, 'admin',
+    ]);
+    admin = { id: r.insertId };
+    console.log(`Created admin account ${adminEmail} (change the password after first login)`);
+  }
+
   await pool.query(`CREATE TABLE IF NOT EXISTS items (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
     name VARCHAR(150) NOT NULL,
     category VARCHAR(60) NOT NULL,
     quantity DECIMAL(10,2) NOT NULL DEFAULT 0,
@@ -53,23 +76,41 @@ export async function initDb() {
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_category (category),
-    INDEX idx_expiry (expiry_date)
+    INDEX idx_expiry (expiry_date),
+    INDEX idx_user (user_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   ) CHARACTER SET utf8mb4`);
   await pool.query(`CREATE TABLE IF NOT EXISTS shopping_items (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
     name VARCHAR(150) NOT NULL,
     qty VARCHAR(80) NOT NULL DEFAULT '',
     done TINYINT(1) NOT NULL DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_user (user_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   ) CHARACTER SET utf8mb4`);
+
+  // Upgrade single-user databases: attach existing rows to the admin account.
+  for (const table of ['items', 'shopping_items']) {
+    const [[{ has }]] = await pool.query(
+      'SELECT COUNT(*) AS has FROM information_schema.columns WHERE table_schema=? AND table_name=? AND column_name=?',
+      [DB_NAME, table, 'user_id']
+    );
+    if (!has) {
+      await pool.query(`ALTER TABLE ${table} ADD COLUMN user_id INT NULL`);
+      await pool.query(`UPDATE ${table} SET user_id=?`, [admin.id]);
+      await pool.query(`ALTER TABLE ${table} MODIFY user_id INT NOT NULL, ADD INDEX idx_user (user_id), ADD FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE`);
+    }
+  }
 
   const [[{ n }]] = await pool.query('SELECT COUNT(*) AS n FROM items');
   if (n === 0) {
     const rows = sample.map(([name, category, quantity, unit, min, price, p, e, loc, sup, notes]) => [
-      name, category, quantity, unit, min, price, day(p), day(e), loc, sup, notes,
+      admin.id, name, category, quantity, unit, min, price, day(p), day(e), loc, sup, notes,
     ]);
     await pool.query(
-      'INSERT INTO items (name,category,quantity,unit,min_stock,price,purchase_date,expiry_date,location,supplier,notes) VALUES ?',
+      'INSERT INTO items (user_id,name,category,quantity,unit,min_stock,price,purchase_date,expiry_date,location,supplier,notes) VALUES ?',
       [rows]
     );
     console.log('Seeded sample inventory');

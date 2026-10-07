@@ -32,26 +32,26 @@ export function clean(b = {}) {
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 
-router.get('/', wrap(async (_req, res) => {
-  const [rows] = await pool.query(`SELECT ${COLS} FROM items ORDER BY name`);
+router.get('/', wrap(async (req, res) => {
+  const [rows] = await pool.query(`SELECT ${COLS} FROM items WHERE user_id=? ORDER BY name`, [req.user.id]);
   res.json(rows);
 }));
 
 router.post('/', wrap(async (req, res) => {
-  const [r] = await pool.query('INSERT INTO items SET ?', [clean(req.body)]);
+  const [r] = await pool.query('INSERT INTO items SET ?', [{ ...clean(req.body), user_id: req.user.id }]);
   const [[row]] = await pool.query(`SELECT ${COLS} FROM items WHERE id=?`, [r.insertId]);
   res.status(201).json(row);
 }));
 
 router.put('/:id', wrap(async (req, res) => {
-  const [r] = await pool.query('UPDATE items SET ? WHERE id=?', [clean(req.body), req.params.id]);
+  const [r] = await pool.query('UPDATE items SET ? WHERE id=? AND user_id=?', [clean(req.body), req.params.id, req.user.id]);
   if (!r.affectedRows) return res.status(404).json({ error: 'Item not found' });
   const [[row]] = await pool.query(`SELECT ${COLS} FROM items WHERE id=?`, [req.params.id]);
   res.json(row);
 }));
 
 router.delete('/:id', wrap(async (req, res) => {
-  const [r] = await pool.query('DELETE FROM items WHERE id=?', [req.params.id]);
+  const [r] = await pool.query('DELETE FROM items WHERE id=? AND user_id=?', [req.params.id, req.user.id]);
   if (!r.affectedRows) return res.status(404).json({ error: 'Item not found' });
   res.status(204).end();
 }));

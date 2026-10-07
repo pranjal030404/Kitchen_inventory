@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { api } from './api.js';
+import { api, getToken, setToken, setUnauthorizedHandler } from './api.js';
+import Login from './components/Login.jsx';
+import Users from './components/Users.jsx';
+import PasswordModal from './components/PasswordModal.jsx';
 import Dashboard from './components/Dashboard.jsx';
 import Inventory from './components/Inventory.jsx';
 import Shopping from './components/Shopping.jsx';
@@ -18,14 +21,35 @@ const TITLES = {
   inventory: ['Inventory', 'Track every ingredient, quantity, and expiry date.'],
   shopping: ['Shopping List', 'Never run out of the essentials.'],
   categories: ['Categories', 'A clear view of your kitchen stock.'],
+  users: ['Users', 'Manage who can access KitchenStock.'],
 };
 
 export default function App() {
+  const [user, setUser] = useState(null);
+  const [ready, setReady] = useState(!getToken());
+
+  const logout = useCallback(() => {
+    setToken(null);
+    setUser(null);
+  }, []);
+
+  useEffect(() => {
+    setUnauthorizedHandler(logout);
+    if (getToken()) api.me().then((r) => setUser(r.user)).catch(() => setToken(null)).finally(() => setReady(true));
+  }, [logout]);
+
+  if (!ready) return <div className="empty">Loading…</div>;
+  if (!user) return <Login onLogin={setUser} />;
+  return <Shell user={user} onLogout={logout} />;
+}
+
+function Shell({ user, onLogout }) {
   const [page, setPage] = useState('dashboard');
   const [menuOpen, setMenuOpen] = useState(false);
   const [items, setItems] = useState([]);
   const [shopping, setShopping] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [pwOpen, setPwOpen] = useState(false);
   const [modal, setModal] = useState(null); // null | {item?: object}
   const [toast, setToast] = useState('');
   const [error, setError] = useState('');
@@ -118,21 +142,27 @@ export default function App() {
     setMenuOpen(false);
   };
 
+  const nav = user.role === 'admin' ? [...NAV, ['users', '👥', 'Users']] : NAV;
   const [title, sub] = TITLES[page];
   const shared = { items, shopping, categories, go, act, openModal: (item) => setModal({ item }), deleteItem };
 
   return (
     <div className="app">
+      {menuOpen && <div className="backdrop" onClick={() => setMenuOpen(false)} />}
       <aside className={`sidebar ${menuOpen ? 'open' : ''}`}>
         <div className="logo"><div className="logo-mark">🍳</div>KitchenStock</div>
         <nav className="nav">
-          {NAV.map(([id, icon, label]) => (
+          {nav.map(([id, icon, label]) => (
             <button key={id} className={page === id ? 'active' : ''} onClick={() => go(id)}>
               <span>{icon}</span>{label}
             </button>
           ))}
         </nav>
-        <div className="side-bottom">Your home kitchen, organized.<br />Data is stored in MySQL.</div>
+        <div className="side-bottom">
+          <div className="user-chip"><b>{user.name}</b><span>{user.email} • {user.role}</span></div>
+          <button className="side-link" onClick={() => { setPwOpen(true); setMenuOpen(false); }}>Change password</button>
+          <button className="side-link" onClick={onLogout}>Sign out</button>
+        </div>
       </aside>
 
       <main className="main">
@@ -143,12 +173,12 @@ export default function App() {
             <h1>{title}</h1>
             <p className="sub">{sub}</p>
           </div>
-          <div className="actions">
+          {page !== 'users' && <div className="actions">
             <button className="btn" onClick={exportData}>↥ Export</button>
             <button className="btn" onClick={() => fileRef.current.click()}>↧ Import</button>
             <input ref={fileRef} type="file" accept=".json" hidden onChange={importData} />
             <button className="btn primary" onClick={() => setModal({})}>+ Add Item</button>
-          </div>
+          </div>}
         </header>
 
         {error && <div className="err">{error} <button className="btn" onClick={load}>Retry</button></div>}
@@ -160,10 +190,17 @@ export default function App() {
             {page === 'inventory' && <Inventory {...shared} />}
             {page === 'shopping' && <Shopping {...shared} />}
             {page === 'categories' && <Categories {...shared} />}
+            {page === 'users' && user.role === 'admin' && <Users me={user} notify={notify} />}
           </>
         )}
       </main>
 
+      <nav className="bottom-nav">
+        {nav.map(([id, icon, label]) => (
+          <button key={id} className={page === id ? 'active' : ''} onClick={() => go(id)}><span>{icon}</span>{label.replace(' List', '')}</button>
+        ))}
+      </nav>
+      {pwOpen && <PasswordModal notify={notify} onClose={() => setPwOpen(false)} />}
       {modal && <ItemModal item={modal.item} categories={categories} onSave={saveItem} onClose={() => setModal(null)} />}
       {toast && <div className="toast show">{toast}</div>}
     </div>

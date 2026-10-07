@@ -34,7 +34,7 @@ export default function Inventory({ items, categories, openModal, deleteItem }) 
       </div>
 
       <div className="card section table-wrap">
-        <table className="table">
+        <table className="table stack">
           <thead>
             <tr><th>Item</th><th>Category</th><th>Quantity</th><th>Expiry</th><th>Value</th><th>Status</th><th>Actions</th></tr>
           </thead>
@@ -42,12 +42,12 @@ export default function Inventory({ items, categories, openModal, deleteItem }) 
             {rows.map((x) => (
               <tr key={x.id}>
                 <td><b>{x.name}</b><div className="muted">{x.location || 'No location'}</div></td>
-                <td>{x.category}</td>
-                <td>{x.quantity} {x.unit}<div className="muted">min {x.minStock} {x.unit}</div></td>
-                <td>{dateFmt(x.expiryDate)}</td>
-                <td>{money(x.quantity * x.price)}</td>
-                <td><Pill item={x} /></td>
-                <td>
+                <td data-label="Category">{x.category}</td>
+                <td data-label="Quantity"><span>{x.quantity} {x.unit}<div className="muted">min {x.minStock} {x.unit}</div></span></td>
+                <td data-label="Expiry">{dateFmt(x.expiryDate)}</td>
+                <td data-label="Value">{money(x.quantity * x.price)}</td>
+                <td data-label="Status"><Pill item={x} /></td>
+                <td data-label="Actions">
                   <div className="actions-cell">
                     <button className="icon-btn" title="Edit" onClick={() => openModal(x)}>✎</button>
                     <button className="icon-btn" title="Delete" onClick={() => deleteItem(x)}>🗑</button>
